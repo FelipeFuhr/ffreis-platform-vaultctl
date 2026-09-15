@@ -32,7 +32,12 @@ jobs:
 
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-sonar.yml@b253b2329a11552b6276781c56f6dc6fd1718710
+    # b253b232... (2026-04-27) tag-pins actions/download-artifact@v8 internally,
+    # which this repo's sha_pinning_required policy rejects ("actions/download-
+    # artifact@v8 is not allowed ... must be pinned to a full-length commit
+    # SHA"). v1.4.0 already carries a real SHA pin for it (same fix window as
+    # go-security.yml's checkout re-pin, see devops-security.yml).
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-sonar.yml@86fd6e3b73fbe6d4f83280ef2661605d441a20e3 # v1.4.0
     with:
       go-version: "1.25.8"
       working-directory: "."
