@@ -25,11 +25,22 @@ concurrency:
 
 jobs:
   build:
-    # f64a2ae... (2026-09-15) carries goprivate/GIT_AUTH_TOKEN support --
-    # `go build` needs to fetch the private ffreis-platform-configctl
-    # dependency; the e9b9cc0c pin predates that feature.
+    # bb787e7... (2026-09-15, PR #106) added goprivate/GIT_AUTH_TOKEN
+    # support -- `go build` needs to fetch the private
+    # ffreis-platform-configctl dependency; the e9b9cc0c pin predates that
+    # feature. Pinned past it to f64a2ae (a later commit on the same main,
+    # unrelated gremlins fix, just the freshest SHA at the time).
+    #
+    # IMPORTANT: e9b9cc0c hardcoded `runs-on: ubuntu-latest` (no `runner`
+    # input existed yet); f64a2ae's version added one that DEFAULTS TO
+    # SELF-HOSTED (`["self-hosted","local"]`) -- verified directly against
+    # each pin's own source. This repo has zero self-hosted runners
+    # registered (a personal-account repo, not reachable from ffreis-org's
+    # pool), so without the override below this job queues forever and
+    # never runs, silently.
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-cross-build-matrix.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
+      runner: '["ubuntu-latest"]'
       go-version: "1.25.8"
       working-directory: "."
       targets: |-

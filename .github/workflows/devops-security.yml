@@ -201,10 +201,18 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    # f64a2ae... carries goprivate/GIT_AUTH_TOKEN support -- golangci-lint
-    # needs to resolve the private ffreis-platform-configctl import.
+    # bb787e7... (PR #106) added goprivate/GIT_AUTH_TOKEN support --
+    # golangci-lint needs to resolve the private ffreis-platform-configctl
+    # import. Pinned past it to f64a2ae (see devops-go-ci.yml's own
+    # mod-tidy job for why that specific SHA). That pin also newly defaults
+    # its runner to self-hosted; this repo has zero self-hosted runners
+    # registered (a personal-account repo, not reachable from ffreis-org's
+    # pool), so a queued-forever job never runs unless overridden below --
+    # same defect class as the missing pull-requests: read above, hit
+    # first in devops-go-ci.yml's own lint job.
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-lint.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
+      runner: '["ubuntu-latest"]'
       go-version: "1.25.8"
       working-directory: "."
       goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"

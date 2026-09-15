@@ -59,6 +59,31 @@ below.
   score-extraction regex, which looked for a capitalized "Efficacy:" string
   gremlins never emits). This repo's own `make mutation` target carries the
   same fix locally, mirroring `ffreis-platform-configctl`'s Makefile.
+- **Every `ffreis-workflows-go` job pinned to a commit newer than its
+  original scaffold pin needs its `runner` input checked, not assumed.**
+  This repo has **zero self-hosted runners registered** (`gh api
+  repos/FelipeFuhr/ffreis-platform-vaultctl/actions/runners` →
+  `total_count: 0`) and `ffreis-org`'s self-hosted pool is not reachable
+  from a personal-account repo (no runner-group sharing across that
+  boundary — this will never self-resolve). At their ORIGINAL scaffold
+  pins, `go-mod-tidy-check.yml`/`go-lint.yml` hardcoded `runs-on:
+  ubuntu-latest`, and `go-coverage.yml`/`go-cross-build-matrix.yml`/
+  `go-mutation.yml` either hardcoded it or had no `runner` input at all.
+  Re-pinning any of them past the point where the fleet added a
+  configurable `runner` input silently switches the default to
+  `["self-hosted","local"]` — a job requesting labels this repo can never
+  match queues forever and never runs, with no failure signal at all (`gh
+  pr checks` just shows it pending; the GitHub API's
+  `actions/jobs/{id}` `runner_name` field stays empty). `go-sonar.yml`'s
+  own default flipped the same way between its v1.4.0 pin and the current
+  one. Caught only by comparing `gh api .../actions/jobs/{id}` for a
+  stuck-pending job against a completed sibling job in the same run, not
+  by anything `actionlint` or a green-looking `gh pr checks` line would
+  ever surface. Every job pinned to a self-hosted-defaulting SHA in this
+  repo's workflows now passes `runner: '["ubuntu-latest"]'` explicitly —
+  do the same for any future re-pin, and verify the specific pin's actual
+  default via `git show <sha>:.github/workflows/<file>.yml`, never by
+  assuming it matches a nearby pin or an earlier check of a different SHA.
 - **This repo's own `.github/workflows/*.yml` were mostly missing
   `ready_for_review` in `pull_request.types`** (only `lefthook.yml` and
   `devops-pr-hygiene.yml` had it) despite several jobs gating on

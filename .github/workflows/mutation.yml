@@ -27,8 +27,18 @@ jobs:
     # workflow now strips the trailing "/..." itself. (2) adds
     # goprivate/GIT_AUTH_TOKEN support -- gremlins' own `go test` needs to
     # fetch the private ffreis-platform-configctl dependency.
+    # IMPORTANT: the ed2f7d29 pin hardcoded `runs-on: ubuntu-latest` (no
+    # `runner` input existed yet); f64a2ae's version added one that
+    # DEFAULTS TO SELF-HOSTED (`["self-hosted","local"]`) -- verified
+    # directly against each pin's own source. This repo has zero
+    # self-hosted runners registered (a personal-account repo, not
+    # reachable from ffreis-org's pool), so without the override below this
+    # job queues forever and never runs, silently -- especially dangerous
+    # here since it only ever fires on a monthly schedule/manual dispatch,
+    # so a silently-hung run could go unnoticed for a long time.
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-mutation.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
+      runner: '["ubuntu-latest"]'
       packages: "./internal/..."
       threshold: 60
       goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"
