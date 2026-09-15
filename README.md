@@ -20,8 +20,9 @@ vaultctl whoami
 ```
 
 Depends on `ffreis-platform-configctl`'s public `pkg/{crypto,store,guard,
-profile,backup,logger}` packages (a private cross-repo Go module — see
-[`AGENTS.md`](AGENTS.md) for the `GOPRIVATE`/CI-credential wiring).
+profile,backup,logger}` packages (a cross-repo Go module wired for private
+access — see [`AGENTS.md`](AGENTS.md) for the `GOPRIVATE`/CI-credential
+wiring and the current actual visibility of that dependency).
 `internal/vaulttier/` (tier/table-name resolution) is vault-specific and
 stays local, not promoted to any `pkg/`.
 

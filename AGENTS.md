@@ -22,24 +22,28 @@ below.
   `main`). `internal/vaulttier/` is the one exception: vault-specific
   tier/table-resolution logic with no reason to be shared, so it stays local
   and does NOT go through `pkg/` promotion here.
-- **Fetching that dependency needs `GOPRIVATE=github.com/FelipeFuhr/*`** (it's
-  a private repo) — required for local `go get`/`go mod tidy` and wired into
-  every Go-touching CI job via a `goprivate` input + `GIT_AUTH_TOKEN` secret,
-  mirroring the pattern already proven in `ffreis-platform-org`'s own
-  `devops-go-ci.yml`. The token is the fleet's canonical `FLEET_READ_TOKEN`
-  repo secret (see `fleet-secrets.sh` in `quality-kit`) — **not yet deployed
-  to this repo as of the PR that wired it**; the fleet's central PAT vault had
-  no stored value for `fleet-read-token-org`/`fleet-read-token-ffreis` to
-  back-fill from. Until a human runs
-  `fleet-secrets.sh vault-put fleet-read-token-<org|ffreis>` once (interactive,
-  hidden-input — this cannot be scripted or inferred) and then
-  `fleet-secrets.sh backfill --repo FelipeFuhr/ffreis-platform-vaultctl`, every
-  CI job that fetches the private dependency (`mod-tidy`, `lint`, `test`,
-  `integration`, `coverage`, `sonar`, `build-all`, `mutation`,
+- **`GOPRIVATE=github.com/FelipeFuhr/*` is set for `go get`/`go mod tidy`**
+  (locally and in every Go-touching CI job, via a `goprivate` input +
+  `GIT_AUTH_TOKEN` secret, mirroring the pattern already proven in
+  `ffreis-platform-org`'s own `devops-go-ci.yml`), even though
+  `ffreis-platform-configctl` is currently a **public** repo (verified via
+  `gh repo view` — contrary to this dependency having been assumed private
+  when this wiring was written) — public fetches don't need it at all today,
+  but the wiring is future-proofed for if/when that repo goes private again,
+  and costs nothing while it stays public (the token input is optional; an
+  empty `GIT_AUTH_TOKEN` just skips the `git config insteadOf` step and the
+  fetch proceeds unauthenticated, which is exactly what happens right now).
+  The token is the fleet's canonical `FLEET_READ_TOKEN` repo secret (see
+  `fleet-secrets.sh` in `quality-kit`) — **not deployed to this repo**, and
+  the fleet's central PAT vault has no stored value to back-fill it from
+  fleet-wide (not specific to this repo). If `ffreis-platform-configctl` ever
+  goes private again, every CI job that fetches it (`mod-tidy`, `lint`,
+  `test`, `integration`, `coverage`, `sonar`, `build-all`, `mutation`,
   `architecture`, `lock-sync`, `devops-security`'s `govulncheck`/`lint`) will
-  fail on that fetch. Local `go get`/`go mod tidy` already work today via this
-  machine's own `gh auth git-credential` + SSH — only CI's own runner lacks
-  credentials.
+  start failing until a human runs
+  `fleet-secrets.sh vault-put fleet-read-token-<org|ffreis>` once
+  (interactive, hidden-input) and then
+  `fleet-secrets.sh backfill --repo FelipeFuhr/ffreis-platform-vaultctl`.
 - **`ffreis-workflows-go`'s `go-sonar.yml` and `go-cross-build-matrix.yml` had
   no `goprivate` support at all** before this repo needed it (only
   `go-mod-tidy-check.yml`/`go-lint.yml`/`go-test.yml`/`go-coverage.yml`/
