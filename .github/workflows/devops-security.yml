@@ -12,9 +12,6 @@ concurrency:
 
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   preflight:
     # Schedule/dispatch: skip if no security-relevant files changed since last successful scan.
@@ -118,6 +115,7 @@ jobs:
       )
     permissions:
       contents: read
+      actions: read
       security-events: write
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-semgrep-sarif.yml@b253b2329a11552b6276781c56f6dc6fd1718710
     with:

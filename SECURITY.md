@@ -11,7 +11,7 @@ Instead, report it privately via
 ## Response Timeline
 
 | Severity | Acknowledgement | Fix Target |
-|---|---|---|
+| --- | --- | --- |
 | Critical / High | 48 hours | 14 days |
 | Medium | 5 business days | 30 days |
 | Low / Informational | 10 business days | Next minor release |

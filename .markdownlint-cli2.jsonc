@@ -1,0 +1,14 @@
+{
+  // markdownlint-cli2 auto-discovers this file (general-markdownlint.yml's
+  // `config` input is only needed to point elsewhere).
+  "config": {
+    "default": true,
+    // Line-length is disabled deliberately, not as a lint-avoidance shortcut:
+    // README.md carries a machine-managed badges block
+    // (<!-- ffreis-badges:start/end -->) with single lines several hundred
+    // chars long, and hand-wrapping prose in AGENTS.md/CONTRIBUTING.md/
+    // SECURITY.md buys nothing for a Go CLI repo with no 80-col terminal
+    // constraint.
+    "MD013": false
+  }
+}
