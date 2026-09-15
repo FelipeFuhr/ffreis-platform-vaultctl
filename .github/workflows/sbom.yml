@@ -10,7 +10,13 @@ jobs:
   sbom:
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-sbom.yml@8ff19efd329b76bce5ff5b98074b9aec74b239da
+    # v1.8.1 (8ff19ef...) pinned anchore/sbom-action@78450e4c..., a SHA that
+    # doesn't exist upstream (orphaned/never-existed) -> "unable to resolve
+    # action", startup_failure. Fixed in v2.0.3 (re-pinned to the real
+    # v0.17.0 commit). v2.0.3 also defaults `runner` to self-hosted, so pin
+    # it explicitly to ubuntu-latest -- this repo has no self-hosted runner.
+    uses: FelipeFuhr/ffreis-workflows-general/.github/workflows/general-sbom.yml@a06d6814d8feed5092a9532297a05b52859cedff # v2.0.3
     with:
       artifact-name: "ffreis-platform-vaultctl-sbom"
       format: "spdx-json"
+      runner: '["ubuntu-latest"]'

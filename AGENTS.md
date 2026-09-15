@@ -15,7 +15,7 @@
 
 ## Structure
 
-```
+```text
 cmd/ffreis-platform-vaultctl/    ← CLI entry point
 internal/               ← feature packages (tested, linted, covered)
 scripts/hooks/          ← pre-commit and pre-push hook scripts

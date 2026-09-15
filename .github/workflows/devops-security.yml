@@ -12,9 +12,6 @@ concurrency:
 
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   preflight:
     # Schedule/dispatch: skip if no security-relevant files changed since last successful scan.
@@ -104,7 +101,13 @@ jobs:
       )
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-security.yml@b253b2329a11552b6276781c56f6dc6fd1718710
+    # b253b232... (2026-04-27) predates ffreis-workflows-go@b7d67ce (2026-04-29,
+    # "bump actions/checkout from 4.1.1 to 6.0.2" for THIS file specifically) --
+    # at that stale pin go-security.yml's checkout step is tag-pinned, which
+    # this repo's sha_pinning_required policy rejects outright ("The action
+    # actions/checkout@v4.1.1 is not allowed ... must be pinned to a full-length
+    # commit SHA"). v1.4.0 carries the fix; matches ffreis-platform-configctl.
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-security.yml@86fd6e3b73fbe6d4f83280ef2661605d441a20e3 # v1.4.0
     with:
       go-version: "1.25.8"
       working-directory: "."
@@ -118,6 +121,7 @@ jobs:
       )
     permissions:
       contents: read
+      actions: read
       security-events: write
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-semgrep-sarif.yml@b253b2329a11552b6276781c56f6dc6fd1718710
     with:
