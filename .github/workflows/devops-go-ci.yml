@@ -52,7 +52,14 @@ jobs:
     if: ${{ !github.event.pull_request.draft }}
 
     needs: [fmt]
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@b253b2329a11552b6276781c56f6dc6fd1718710
+    permissions:
+      contents: read
+      id-token: write # go-test.yml's job needs this for its (no-op here) S3 cache OIDC step
+    # b253b232... (2026-04-27) tag-pins actions/checkout@v4.1.1 in go-test.yml,
+    # rejected once this repo's sha_pinning_required policy is active ("must be
+    # pinned to a full-length commit SHA") -- see devops-security.yml for the
+    # same defect class. v1.4.0 SHA-pins it.
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@86fd6e3b73fbe6d4f83280ef2661605d441a20e3 # v1.4.0
     with:
       go-version: "1.25.8"
       working-directory: "."
@@ -62,7 +69,10 @@ jobs:
     if: ${{ !github.event.pull_request.draft }}
 
     needs: [fmt]
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@b253b2329a11552b6276781c56f6dc6fd1718710
+    permissions:
+      contents: read
+      id-token: write # go-test.yml's job needs this for its (no-op here) S3 cache OIDC step
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-test.yml@86fd6e3b73fbe6d4f83280ef2661605d441a20e3 # v1.4.0
     with:
       go-version: "1.25.8"
       working-directory: "."
