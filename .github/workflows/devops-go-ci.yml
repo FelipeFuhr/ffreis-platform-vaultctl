@@ -54,7 +54,15 @@ jobs:
   lint:
     needs: [fmt]
     # f64a2ae... carries goprivate/GIT_AUTH_TOKEN support for go-lint.yml --
-    # golangci-lint needs to resolve the private configctl import too.
+    # golangci-lint needs to resolve the private configctl import too. That
+    # pin's job also newly requires `pull-requests: read` (for
+    # golangci-lint-action to fetch PR info) on top of `contents: read` --
+    # the top-level `contents: read` alone isn't a superset of that, which
+    # fails the whole workflow file at dispatch with a zero-job
+    # startup_failure (invisible to actionlint) until granted here.
+    permissions:
+      contents: read
+      pull-requests: read
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-lint.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
       go-version: "1.25.8"

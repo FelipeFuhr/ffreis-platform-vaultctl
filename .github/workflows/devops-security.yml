@@ -184,8 +184,14 @@ jobs:
 
 
   lint:
+    # That pin's job requires `pull-requests: read` (for golangci-lint-action
+    # to fetch PR info) on top of `contents: read` -- omitting it fails the
+    # whole workflow file at dispatch with a zero-job startup_failure,
+    # invisible to actionlint (see devops-go-ci.yml's own lint job for the
+    # same defect class, hit first there).
     permissions:
       contents: read
+      pull-requests: read
     # f64a2ae... carries goprivate/GIT_AUTH_TOKEN support -- golangci-lint
     # needs to resolve the private ffreis-platform-configctl import.
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-lint.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
