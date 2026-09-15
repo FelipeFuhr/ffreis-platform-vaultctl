@@ -2,6 +2,7 @@ name: Build All (Go Matrix)
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '**/*.go'
       - 'go.mod'
@@ -24,9 +25,15 @@ concurrency:
 
 jobs:
   build:
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-cross-build-matrix.yml@e9b9cc0cde6465b785f4b7c71d2180f5b265f42f
+    # f64a2ae... (2026-09-15) carries goprivate/GIT_AUTH_TOKEN support --
+    # `go build` needs to fetch the private ffreis-platform-configctl
+    # dependency; the e9b9cc0c pin predates that feature.
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-cross-build-matrix.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
       go-version: "1.25.8"
       working-directory: "."
       targets: |-
-        ./cmd/ffreis-platform-vaultctl
+        ./cmd/vaultctl
+      goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"
+    secrets:
+      GIT_AUTH_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}

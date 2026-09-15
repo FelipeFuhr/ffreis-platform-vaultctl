@@ -4,7 +4,30 @@
 [![CI](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/FelipeFuhr/ffreis-badges/main/badges/ffreis-platform-vaultctl/ci.json)](https://github.com/FelipeFuhr/ffreis-platform-vaultctl/actions) [![License](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/FelipeFuhr/ffreis-badges/main/badges/ffreis-platform-vaultctl/license.json)](https://github.com/FelipeFuhr/ffreis-platform-vaultctl/blob/main/LICENSE)
 <!-- ffreis-badges:end -->
 
-A Go CLI tool.
+`vaultctl` — the fleet's credential-vault CLI. It manages secrets across the
+identity/repo/root DynamoDB vault tables, keyed by an explicit `<tier>` and
+`--env` (`dev`/`prod`, no default — there is no `--table` and no `--project`).
+
+```text
+vaultctl get <tier> <key> --env <env> [--reveal]
+vaultctl put <tier> <key> --env <env>            # reads plaintext from stdin
+vaultctl exec <tier> <key> --as <VAR> --env <env> -- <command> [args...]
+vaultctl export-env <tier> <key> --as <VAR> --out <path> --env <env>
+vaultctl list <tier> --env <env>
+vaultctl delete <tier> <key> --env <env>
+vaultctl backup export|import ...
+vaultctl whoami
+```
+
+Depends on `ffreis-platform-configctl`'s public `pkg/{crypto,store,guard,
+profile,backup,logger}` packages (a private cross-repo Go module — see
+[`AGENTS.md`](AGENTS.md) for the `GOPRIVATE`/CI-credential wiring).
+`internal/vaulttier/` (tier/table-name resolution) is vault-specific and
+stays local, not promoted to any `pkg/`.
+
+**Consumers:** `quality-kit`'s `/vault` and `/vault-deploy` skills invoke this
+binary directly as a bare `vaultctl` command — see that repo for the actual
+call sites.
 
 ## Development
 

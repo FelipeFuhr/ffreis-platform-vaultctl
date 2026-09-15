@@ -111,6 +111,9 @@ jobs:
     with:
       go-version: "1.25.8"
       working-directory: "."
+      goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"
+    secrets:
+      GIT_AUTH_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}
 
   semgrep:
     needs: preflight
@@ -183,7 +186,12 @@ jobs:
   lint:
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-lint.yml@b253b2329a11552b6276781c56f6dc6fd1718710
+    # f64a2ae... carries goprivate/GIT_AUTH_TOKEN support -- golangci-lint
+    # needs to resolve the private ffreis-platform-configctl import.
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-lint.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
       go-version: "1.25.8"
       working-directory: "."
+      goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"
+    secrets:
+      GIT_AUTH_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}

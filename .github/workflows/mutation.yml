@@ -20,10 +20,20 @@ permissions:
 
 jobs:
   mutation:
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-mutation.yml@ed2f7d29467bf1fd6ec40df3953b3ee128ba3f04
+    # f64a2ae... (2026-09-15) fixes two bugs the ed2f7d29 pin carried: (1)
+    # gremlins' `unleash [path]` doesn't understand a go-list `...` pattern
+    # like "./internal/..." -- it silently printed "No results to report."
+    # and exited 0, a vacuous pass with zero mutants tested; the reusable
+    # workflow now strips the trailing "/..." itself. (2) adds
+    # goprivate/GIT_AUTH_TOKEN support -- gremlins' own `go test` needs to
+    # fetch the private ffreis-platform-configctl dependency.
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-mutation.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
       packages: "./internal/..."
       threshold: 60
+      goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"
+    secrets:
+      GIT_AUTH_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}
 
   notify-failure:
     needs: [mutation]

@@ -1,4 +1,5 @@
 dist/
 .bin/
+/bin/
 *.out
 coverage.out
