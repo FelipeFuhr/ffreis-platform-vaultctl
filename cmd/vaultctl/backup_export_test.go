@@ -160,6 +160,29 @@ func TestNewBackupExportCmd_InvalidTierFailsBeforeAnyNetworkCall(t *testing.T) {
 	}
 }
 
+// TestNewBackupExportCmd_ReachesRunBackupExportOnValidTier is backup
+// export's analogue of delete/list's identically-purposed test: a valid
+// tier clears openStore (no network call — see openStore's own doc), so
+// RunE reaches its final `return runBackupExport(...)` line; the exporter's
+// own store.List then fails fast against the unreachable endpoint instead
+// of reaching real AWS. Without this, that line — the only place RunE is
+// wired to the real os.WriteFile/os.Chmod — went uncovered even though
+// every other command already had its valid-tier continuation covered.
+func TestNewBackupExportCmd_ReachesRunBackupExportOnValidTier(t *testing.T) {
+	t.Parallel()
+
+	d := &deps{awsCfg: unreachableAWSConfig()}
+	cmd := newBackupExportCmd(d)
+	cmd.SetArgs([]string{"--tier", "identity", "--output", "/tmp/out.json", "--env", "dev"})
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("Execute() error = nil, want error from the unreachable store")
+	}
+}
+
 func TestNewBackupExportCmd_FlagWiring(t *testing.T) {
 	t.Parallel()
 
