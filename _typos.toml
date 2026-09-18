@@ -1,0 +1,12 @@
+[default.extend-words]
+# "unparseable" is a legitimate (if less common than "unparsable") spelling
+# used in cmd/vaultctl/backup_import_test.go's error message.
+unparseable = "unparseable"
+# Not a typo for "use"/"due" -- this is the tail end of the deliberately
+# apostrophe-containing test value `tricky$val'ue` in
+# cmd/vaultctl/export_env_test.go (TestRunExportEnv_ShellQuotedValueSourcesCleanly),
+# which exists specifically to prove a literal single quote in a secret
+# value round-trips safely through shell quoting. Tokenizes as its own
+# "word" because of the apostrophe; changing the test string would defeat
+# its purpose.
+ue = "ue"

@@ -109,8 +109,20 @@ jobs:
     # commit SHA"). v1.4.0 carries the fix; matches ffreis-platform-configctl.
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-security.yml@86fd6e3b73fbe6d4f83280ef2661605d441a20e3 # v1.4.0
     with:
-      go-version: "1.25.8"
+      # go-security.yml's govulncheck-action always installs the LATEST
+      # govulncheck release (no version-pin input exposed) with
+      # check-latest: true; golang.org/x/vuln v1.8.0 now requires go
+      # >=1.26.0, and actions/setup-go's runner has GOTOOLCHAIN=local (no
+      # auto-upgrade), so the fleet's usual 1.25.8 pin fails outright with
+      # "requires go >= 1.26.0 (running go 1.25.8; GOTOOLCHAIN=local)" --
+      # a known, fleet-wide (~30 repos) issue unrelated to this repo's own
+      # code. Scoped fix: this ONE job (govulncheck-action's own internal
+      # setup-go, not this repo's real toolchain) uses 1.26 instead.
+      go-version: "1.26"
       working-directory: "."
+      goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"
+    secrets:
+      GIT_AUTH_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}
 
   semgrep:
     needs: preflight
@@ -181,9 +193,28 @@ jobs:
 
 
   lint:
+    # That pin's job requires `pull-requests: read` (for golangci-lint-action
+    # to fetch PR info) on top of `contents: read` -- omitting it fails the
+    # whole workflow file at dispatch with a zero-job startup_failure,
+    # invisible to actionlint (see devops-go-ci.yml's own lint job for the
+    # same defect class, hit first there).
     permissions:
       contents: read
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-lint.yml@b253b2329a11552b6276781c56f6dc6fd1718710
+      pull-requests: read
+    # bb787e7... (PR #106) added goprivate/GIT_AUTH_TOKEN support --
+    # golangci-lint needs to resolve the private ffreis-platform-configctl
+    # import. Pinned past it to f64a2ae (see devops-go-ci.yml's own
+    # mod-tidy job for why that specific SHA). That pin also newly defaults
+    # its runner to self-hosted; this repo has zero self-hosted runners
+    # registered (a personal-account repo, not reachable from ffreis-org's
+    # pool), so a queued-forever job never runs unless overridden below --
+    # same defect class as the missing pull-requests: read above, hit
+    # first in devops-go-ci.yml's own lint job.
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-lint.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
+      runner: '["ubuntu-latest"]'
       go-version: "1.25.8"
       working-directory: "."
+      goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"
+    secrets:
+      GIT_AUTH_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}

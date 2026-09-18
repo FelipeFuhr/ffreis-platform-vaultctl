@@ -3,6 +3,7 @@ name: Code Quality (SonarCloud)
 on:
   workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "**/*.go"
       - "go.mod"
@@ -37,9 +38,27 @@ jobs:
     # artifact@v8 is not allowed ... must be pinned to a full-length commit
     # SHA"). v1.4.0 already carries a real SHA pin for it (same fix window as
     # go-security.yml's checkout re-pin, see devops-security.yml).
-    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-sonar.yml@86fd6e3b73fbe6d4f83280ef2661605d441a20e3 # v1.4.0
+    # bb787e7... (2026-09-15, PR #106) added goprivate/GIT_AUTH_TOKEN support
+    # on top of v1.4.0 -- go-sonar.yml's own "Generate coverage" step runs a
+    # bare `go test ./...`, which needs to fetch the private
+    # ffreis-platform-configctl dependency. Pinned past it to f64a2ae (a
+    # later commit on the same main, unrelated gremlins fix, just the
+    # freshest SHA at the time).
+    #
+    # IMPORTANT: at v1.4.0 this job's `runner` input defaulted to
+    # `["ubuntu-latest"]`; by f64a2ae it defaults to
+    # `["self-hosted","local"]` instead (verified directly against each
+    # pin's own source -- do not assume, this one bit a sibling job in this
+    # exact repo already). This repo has zero self-hosted runners
+    # registered (a personal-account repo, not reachable from ffreis-org's
+    # pool), so without the override below this job queues forever and
+    # never runs, silently.
+    uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-sonar.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
+      runner: '["ubuntu-latest"]'
       go-version: "1.25.8"
       working-directory: "."
+      goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      GIT_AUTH_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}
