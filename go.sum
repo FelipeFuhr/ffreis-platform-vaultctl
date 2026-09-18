@@ -1,5 +1,5 @@
-github.com/FelipeFuhr/ffreis-platform-configctl v0.0.0-20260915013946-5160f5e72276 h1:HVJ3ydqnwTwGcJJ5WNdgfmHw6A3Ca2TV0+2oi+mTto0=
-github.com/FelipeFuhr/ffreis-platform-configctl v0.0.0-20260915013946-5160f5e72276/go.mod h1:K92iURfT9G5nsvX+fFmRQUvalsQUaUGcdncJQe0FyNU=
+github.com/FelipeFuhr/ffreis-platform-configctl v0.0.0-20260918170453-47965e6f5962 h1:0icMaXAno1Cu/EAJ0o3a0Hc1qneeWiXZqwHK8BfuLOw=
+github.com/FelipeFuhr/ffreis-platform-configctl v0.0.0-20260918170453-47965e6f5962/go.mod h1:K92iURfT9G5nsvX+fFmRQUvalsQUaUGcdncJQe0FyNU=
 github.com/aws/aws-sdk-go-v2 v1.41.7 h1:DWpAJt66FmnnaRIOT/8ASTucrvuDPZASqhhLey6tLY8=
 github.com/aws/aws-sdk-go-v2 v1.41.7/go.mod h1:4LAfZOPHNVNQEckOACQx60Y8pSRjIkNZQz1w92xpMJc=
 github.com/aws/aws-sdk-go-v2/config v1.32.17 h1:FpL4/758/diKwqbytU0prpuiu60fgXKUWCpDJtApclU=

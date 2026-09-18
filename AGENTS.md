@@ -16,12 +16,20 @@ below.
   the Makefile). Do not rename `BINARY_NAME` to match the repo name.
 - **Depends on `ffreis-platform-configctl`'s public `pkg/` packages**, not a
   vendored/forked copy. `go.mod` pins
-  `github.com/FelipeFuhr/ffreis-platform-configctl v0.0.0-20260915013946-5160f5e72276`
-  (the pseudo-version `go get` resolved for commit `5160f5e722761a97c4dc615925387fd81fd72495`
-  on that repo's `feat/secret-vault-cli-guardrails` branch — not yet on its
-  `main`). `internal/vaulttier/` is the one exception: vault-specific
-  tier/table-resolution logic with no reason to be shared, so it stays local
-  and does NOT go through `pkg/` promotion here.
+  `github.com/FelipeFuhr/ffreis-platform-configctl v0.0.0-20260918170453-47965e6f5962`
+  (the pseudo-version `go get` resolved for commit
+  `47965e6f5962c48f459564449a44ab84cff49ed1`, which is that repo's `main` HEAD
+  at time of pinning). This replaces an earlier pin
+  (`v0.0.0-20260915013946-5160f5e72276`, for commit `5160f5e722761a97c4dc615925387fd81fd72495`
+  on that repo's `feat/secret-vault-cli-guardrails` branch) that broke every
+  Go-touching CI job once that branch was squash-merged and deleted — the
+  original commit became unreachable, so `go mod` resolution failed with
+  `invalid version: unknown revision 5160f5e72276`. **Lesson: never pin a
+  pseudo-version to a commit on someone else's feature branch** — re-pin to
+  that repo's `main` once the work lands there, not before, or the pin rots
+  the moment the branch is cleaned up. `internal/vaulttier/` is the one
+  exception: vault-specific tier/table-resolution logic with no reason to be
+  shared, so it stays local and does NOT go through `pkg/` promotion here.
 - **`GOPRIVATE=github.com/FelipeFuhr/*` is set for `go get`/`go mod tidy`**
   (locally and in every Go-touching CI job, via a `goprivate` input +
   `GIT_AUTH_TOKEN` secret, mirroring the pattern already proven in
