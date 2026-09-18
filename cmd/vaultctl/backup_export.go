@@ -39,7 +39,7 @@ plaintext; 'import' can only write it back as ciphertext too.`,
 			}
 			return runBackupExport(cmd.Context(), st, d.log, d.secretKey, backupExportOpts{
 				tier: tier, env: env, outputPath: output, includeSecrets: includeSecrets,
-			}, os.WriteFile, callerIdentity(cmd.Context(), d), cmd.OutOrStdout())
+			}, os.WriteFile, os.Chmod, callerIdentity(cmd.Context(), d), cmd.OutOrStdout())
 		},
 	}
 
@@ -66,6 +66,7 @@ func runBackupExport(
 	secretKey string,
 	opts backupExportOpts,
 	writeFile func(string, []byte, os.FileMode) error,
+	chmod func(string, os.FileMode) error,
 	exportedBy string,
 	stdout io.Writer,
 ) error {
@@ -93,7 +94,7 @@ func runBackupExport(
 		return fmt.Errorf("marshal backup: %w", err)
 	}
 
-	if err := writeFile(opts.outputPath, append(raw, '\n'), 0o600); err != nil {
+	if err := writeSecretFile(writeFile, chmod, opts.outputPath, append(raw, '\n'), 0o600); err != nil {
 		return fmt.Errorf("write file %s: %w", opts.outputPath, err)
 	}
 

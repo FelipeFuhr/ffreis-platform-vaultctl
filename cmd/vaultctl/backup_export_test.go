@@ -39,7 +39,7 @@ func TestRunBackupExport_WritesFileWithTierInMetadata(t *testing.T) {
 	var out bytes.Buffer
 	err := runBackupExport(context.Background(), st, noopLogger{}, testSecretKey, backupExportOpts{
 		tier: "root", env: "prod", outputPath: "/tmp/vault-root-prod.json", includeSecrets: true,
-	}, writeFile, "tester-arn", &out)
+	}, writeFile, noopChmod, "tester-arn", &out)
 	if err != nil {
 		t.Fatalf("runBackupExport() error = %v", err)
 	}
@@ -71,13 +71,45 @@ func TestRunBackupExport_WritesFileWithTierInMetadata(t *testing.T) {
 	}
 }
 
+// TestRunBackupExport_CorrectsPreExistingLoosePermissions is backup export's
+// analogue of export-env's identically-named test: os.WriteFile never
+// corrects an existing file's mode, so a stale --output file left over at a
+// looser permission must have its mode actively corrected to 0600, not
+// silently inherited. Uses the real os.WriteFile/os.Chmod, not fakes.
+func TestRunBackupExport_CorrectsPreExistingLoosePermissions(t *testing.T) {
+	item := encryptedVaultItem("root", "prod", "master-key", "value")
+	st := backupExportStore([]*store.Item{item})
+
+	dir := t.TempDir()
+	path := dir + "/backup.json"
+	if err := os.WriteFile(path, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("seed pre-existing file: %v", err)
+	}
+
+	var out bytes.Buffer
+	err := runBackupExport(context.Background(), st, noopLogger{}, testSecretKey, backupExportOpts{
+		tier: "root", env: "prod", outputPath: path, includeSecrets: true,
+	}, os.WriteFile, os.Chmod, "tester", &out)
+	if err != nil {
+		t.Fatalf("runBackupExport() error = %v", err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat exported file: %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("exported file mode = %o, want 0600 — a pre-existing looser mode must be corrected, not inherited", info.Mode().Perm())
+	}
+}
+
 func TestRunBackupExport_WithoutIncludeSecretsDoesNotRequireSecretKey(t *testing.T) {
 	t.Parallel()
 
 	st := backupExportStore(nil)
 	err := runBackupExport(context.Background(), st, noopLogger{}, "" /* no secret key */, backupExportOpts{
 		tier: "identity", env: "dev", outputPath: "/tmp/out.json", includeSecrets: false,
-	}, func(string, []byte, os.FileMode) error { return nil }, "tester", &bytes.Buffer{})
+	}, func(string, []byte, os.FileMode) error { return nil }, noopChmod, "tester", &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("runBackupExport() error = %v, want nil — no secret key needed without --include-secrets", err)
 	}
@@ -89,7 +121,7 @@ func TestRunBackupExport_IncludeSecretsRequiresSecretKey(t *testing.T) {
 	st := backupExportStore(nil)
 	err := runBackupExport(context.Background(), st, noopLogger{}, "", backupExportOpts{
 		tier: "identity", env: "dev", outputPath: "/tmp/out.json", includeSecrets: true,
-	}, func(string, []byte, os.FileMode) error { return nil }, "tester", &bytes.Buffer{})
+	}, func(string, []byte, os.FileMode) error { return nil }, noopChmod, "tester", &bytes.Buffer{})
 	if err == nil {
 		t.Fatal("runBackupExport() error = nil, want error requiring a secret key with --include-secrets")
 	}
@@ -101,9 +133,53 @@ func TestRunBackupExport_WriteFileErrorPropagates(t *testing.T) {
 	st := backupExportStore(nil)
 	err := runBackupExport(context.Background(), st, noopLogger{}, testSecretKey, backupExportOpts{
 		tier: "identity", env: "dev", outputPath: "/tmp/out.json",
-	}, func(string, []byte, os.FileMode) error { return errTest("disk full") }, "tester", &bytes.Buffer{})
+	}, func(string, []byte, os.FileMode) error { return errTest("disk full") }, noopChmod, "tester", &bytes.Buffer{})
 	if err == nil {
 		t.Fatal("runBackupExport() error = nil, want error propagated from writeFile")
+	}
+}
+
+// TestNewBackupExportCmd_InvalidTierFailsBeforeAnyNetworkCall exercises the
+// real cobra Execute() path (not a direct runBackupExport call) so the
+// RunE closure's own openStore-error branch — otherwise the one line in
+// this package gremlins mutation testing found uncovered — is actually
+// exercised, matching the same pattern already used for get/put/exec/
+// export-env/list/delete's own "invalid tier fails before any network call"
+// tests.
+func TestNewBackupExportCmd_InvalidTierFailsBeforeAnyNetworkCall(t *testing.T) {
+	t.Parallel()
+
+	cmd := newBackupExportCmd(&deps{})
+	cmd.SetArgs([]string{"--tier", "bogus", "--output", "/tmp/out.json", "--env", "dev"})
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("Execute() error = nil, want error for an invalid tier")
+	}
+}
+
+// TestNewBackupExportCmd_ReachesRunBackupExportOnValidTier is backup
+// export's analogue of delete/list's identically-purposed test: a valid
+// tier clears openStore (no network call — see openStore's own doc), so
+// RunE reaches its final `return runBackupExport(...)` line; the exporter's
+// own store.List then fails fast against the unreachable endpoint instead
+// of reaching real AWS. Without this, that line — the only place RunE is
+// wired to the real os.WriteFile/os.Chmod — went uncovered even though
+// every other command already had its valid-tier continuation covered.
+func TestNewBackupExportCmd_ReachesRunBackupExportOnValidTier(t *testing.T) {
+	t.Parallel()
+
+	d := &deps{awsCfg: unreachableAWSConfig()}
+	cmd := newBackupExportCmd(d)
+	cmd.SetArgs([]string{"--tier", "identity", "--output", "/tmp/out.json", "--env", "dev"})
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+
+	if err := cmd.Execute(); err == nil {
+		t.Fatal("Execute() error = nil, want error from the unreachable store")
 	}
 }
 

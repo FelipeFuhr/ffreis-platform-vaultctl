@@ -13,7 +13,7 @@ go 1.25.8
 toolchain go1.25.13
 
 require (
-	github.com/FelipeFuhr/ffreis-platform-configctl v0.0.0-20260915013946-5160f5e72276
+	github.com/FelipeFuhr/ffreis-platform-configctl v0.0.0-20260918170453-47965e6f5962
 	github.com/aws/aws-sdk-go-v2 v1.41.7
 	github.com/aws/aws-sdk-go-v2/config v1.32.17
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.16

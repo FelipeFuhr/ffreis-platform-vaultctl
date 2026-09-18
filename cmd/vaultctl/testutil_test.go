@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -10,6 +11,10 @@ import (
 	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/logger"
 	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
 )
+
+// noopChmod is a fake chmod for tests whose writeFile is also faked (so
+// there is no real file on disk for a real os.Chmod to act on).
+func noopChmod(string, os.FileMode) error { return nil }
 
 // unreachableAWSConfig points a real (non-fake) AWS config at a local port
 // nothing listens on, with retries disabled. Used to exercise a command's

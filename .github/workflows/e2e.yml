@@ -1,5 +1,15 @@
-name: Integration Tests
+name: E2E Tests
 
+# vaultctl's whole reason to exist is a leak-control guarantee (a secret
+# must never reach a stream that could land in a session transcript). The
+# //go:build e2e suite (see cmd/vaultctl/e2e_test.go) is the ONLY layer that
+# proves that black-box, against the real compiled binary run as a real OS
+# subprocess with its real stdout/stderr captured -- a unit test that only
+# inspects an injected io.Writer cannot catch a leak that bypasses that
+# writer (e.g. a stray fmt.Println/os.Stdout write). Before this workflow
+# existed, `make test-e2e` had NO CI wiring at all -- it only ever ran when
+# a human happened to run it locally, so a regression of exactly the kind
+# this suite exists to catch could ship silently through every other gate.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -27,19 +37,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  integration:
+  e2e:
     timeout-minutes: 30
     if: ${{ !github.event.pull_request.draft }}
 
     runs-on: ubuntu-latest
-    # Without this, `go test -tags=integration ./...` below finds no
-    # reachable DynamoDB at localhost:8000, every //go:build integration
-    # test self-t.Skip()s (by design, so a machine without a container
-    # runtime stays green), and this job has been passing while running
-    # ZERO actual integration assertions on every PR. A GitHub Actions
-    # service container (not the Makefile's own podman-based
-    # ddb-local-up/down, which isn't guaranteed present on this runner)
-    # exposes port 8000 directly to the job's steps.
+    # Mirrors integration.yml's own service container -- the e2e suite talks
+    # to DYNAMODB_ENDPOINT (defaults to localhost:8000) the same way, via a
+    # real subprocess exec of the compiled vaultctl binary rather than an
+    # in-process call.
     services:
       dynamodb-local:
         image: docker.io/amazon/dynamodb-local:2.5.2
@@ -71,5 +77,8 @@ jobs:
           go-version: "1.25.8"
           cache: true
 
-      - name: Run integration tests
-        run: go test -tags=integration ./...
+      # `go test -tags=e2e` builds the real vaultctl binary itself (see
+      # buildVaultctlBinary in e2e_test.go) and execs it as a subprocess --
+      # this step does not need a separate `go build` first.
+      - name: Run e2e tests
+        run: go test -tags=e2e ./cmd/vaultctl/... -run 'TestE2E' -v -count=1

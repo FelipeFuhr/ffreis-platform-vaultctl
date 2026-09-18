@@ -117,6 +117,65 @@ func TestRunExec_CommandNotFoundErrorNeverIncludesValue(t *testing.T) {
 	}
 }
 
+// TestRunExec_WrongPassphraseDecryptFailureNeverLeaksPlaintextOrPassphrase
+// deliberately triggers a decrypt failure (wrong VAULTCTL_SECRET_KEY) and
+// inspects the FULL error string vaultctl returns — not just its type — to
+// prove that neither the plaintext nor either passphrase (right or wrong)
+// ever rides along in the error text that ultimately reaches stderr.
+func TestRunExec_WrongPassphraseDecryptFailureNeverLeaksPlaintextOrPassphrase(t *testing.T) {
+	t.Parallel()
+
+	const plaintext = "s3cr3t-must-never-leak-in-error-text"
+	const wrongKey = "98765432109876543210987654321098"
+	st := execDeps(plaintext)
+
+	var stdout, stderr bytes.Buffer
+	err := runExec(context.Background(), st, noopLogger{}, wrongKey, "identity", "api_key", "dev", "X",
+		[]string{"true"}, strings.NewReader(""), &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runExec() error = nil, want decrypt failure under a wrong passphrase")
+	}
+
+	full := err.Error()
+	for _, sensitive := range []string{plaintext, testSecretKey, wrongKey} {
+		if strings.Contains(full, sensitive) {
+			t.Fatalf("decrypt-failure error text leaked a sensitive value %q: %q", sensitive, full)
+		}
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("vaultctl's own streams must stay empty on decrypt failure: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+// TestRunExec_CorruptedCiphertextDecryptFailureNeverLeaksPlaintext is the
+// corrupted-ciphertext analogue of the wrong-passphrase test above — a
+// distinct failure mode (authentication failure / malformed encoding rather
+// than a key mismatch) that must be equally safe.
+func TestRunExec_CorruptedCiphertextDecryptFailureNeverLeaksPlaintext(t *testing.T) {
+	t.Parallel()
+
+	const plaintext = "s3cr3t-corrupted-ciphertext-must-not-leak"
+	item := encryptedVaultItem("identity", "dev", "api_key", plaintext)
+	corrupted := *item
+	corrupted.Value = corrupted.Value[:len(corrupted.Value)-4] + "AAAA"
+	st := fakeStore{getFn: func(context.Context, string, string, store.ItemType, string) (*store.Item, error) {
+		return &corrupted, nil
+	}}
+
+	var stdout, stderr bytes.Buffer
+	err := runExec(context.Background(), st, noopLogger{}, testSecretKey, "identity", "api_key", "dev", "X",
+		[]string{"true"}, strings.NewReader(""), &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runExec() error = nil, want decrypt failure for corrupted ciphertext")
+	}
+	if strings.Contains(err.Error(), plaintext) {
+		t.Fatalf("corrupted-ciphertext error text leaked the plaintext: %q", err.Error())
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("vaultctl's own streams must stay empty on decrypt failure: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 // TestNewExecCmd_EndToEnd_SplitsTierKeyAndCommandAtDash exercises the real
 // cobra flag-parsing path, proving the "-- " splitting works against real
 // pflag parsing with TWO positional args (tier, key) before the dash.

@@ -49,7 +49,7 @@ Example:
 			if err != nil {
 				return err
 			}
-			return runExportEnv(cmd.Context(), st, d.log, d.secretKey, tier, key, env, as, out, os.WriteFile, cmd.OutOrStdout())
+			return runExportEnv(cmd.Context(), st, d.log, d.secretKey, tier, key, env, as, out, os.WriteFile, os.Chmod, cmd.OutOrStdout())
 		},
 	}
 
@@ -67,6 +67,7 @@ func runExportEnv(
 	log logger.Logger,
 	secretKey, tier, key, env, as, out string,
 	writeFile func(string, []byte, os.FileMode) error,
+	chmod func(string, os.FileMode) error,
 	stdout io.Writer,
 ) error {
 	if as == "" {
@@ -89,7 +90,7 @@ func runExportEnv(
 	}
 
 	line := "export " + as + "=" + shellQuoteSingle(string(plaintext)) + "\n"
-	if err := writeFile(out, []byte(line), 0o600); err != nil {
+	if err := writeSecretFile(writeFile, chmod, out, []byte(line), 0o600); err != nil {
 		return fmt.Errorf("write export file: %w", err)
 	}
 
