@@ -36,10 +36,15 @@ jobs:
     # job queues forever and never runs, silently -- especially dangerous
     # here since it only ever fires on a monthly schedule/manual dispatch,
     # so a silently-hung run could go unnoticed for a long time.
+    # packages was "./internal/..." only -- cmd/vaultctl's cobra command
+    # wiring (which env var gets checked, whether a value gets printed) is
+    # exactly the security logic this vault exists to protect, not
+    # low-value glue, so it must be mutation-tested too. Mirrors the
+    # Makefile's own MUTATION_PACKAGES default.
     uses: FelipeFuhr/ffreis-workflows-go/.github/workflows/go-mutation.yml@f64a2ae5810fd2f661ec9f4e1d2d9e2279f54cd6
     with:
       runner: '["ubuntu-latest"]'
-      packages: "./internal/..."
+      packages: "./internal/... ./cmd/vaultctl/..."
       threshold: 60
       goprivate: "github.com/FelipeFuhr/ffreis-platform-configctl"
     secrets:

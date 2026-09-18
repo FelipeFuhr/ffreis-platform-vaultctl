@@ -15,6 +15,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -30,6 +31,8 @@ import (
 
 	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/backup"
 	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/store"
+
+	"github.com/ffreis/platform-vaultctl/internal/vaulttier"
 )
 
 const defaultDDBEndpoint = "http://localhost:8000"
@@ -103,6 +106,43 @@ func newIntegrationTable(t *testing.T, client *dynamodb.Client) string {
 		_, _ = client.DeleteTable(context.Background(), &dynamodb.DeleteTableInput{TableName: awssdk.String(name)})
 	})
 	return name
+}
+
+// newRealTierTable creates the REAL, production-named table for tier+env
+// (via vaulttier.TableName — the exact same resolution openStore uses, not
+// an ad-hoc throwaway name) and removes it when the test ends. Used by
+// tests that need to prove tier isolation itself, where a single
+// arbitrarily-named throwaway table (as newIntegrationTable creates) cannot
+// exercise the actual per-tier table separation.
+func newRealTierTable(t *testing.T, client *dynamodb.Client, tier, env string) store.Store {
+	t.Helper()
+
+	table, err := vaulttier.TableName(tier, env)
+	if err != nil {
+		t.Fatalf("vaulttier.TableName(%q, %q): %v", tier, env, err)
+	}
+
+	ctx := context.Background()
+	_, err = client.CreateTable(ctx, &dynamodb.CreateTableInput{
+		TableName: awssdk.String(table),
+		AttributeDefinitions: []ddbtypes.AttributeDefinition{
+			{AttributeName: awssdk.String("PK"), AttributeType: ddbtypes.ScalarAttributeTypeS},
+			{AttributeName: awssdk.String("SK"), AttributeType: ddbtypes.ScalarAttributeTypeS},
+		},
+		KeySchema: []ddbtypes.KeySchemaElement{
+			{AttributeName: awssdk.String("PK"), KeyType: ddbtypes.KeyTypeHash},
+			{AttributeName: awssdk.String("SK"), KeyType: ddbtypes.KeyTypeRange},
+		},
+		BillingMode: ddbtypes.BillingModePayPerRequest,
+	})
+	var inUse *ddbtypes.ResourceInUseException
+	if err != nil && !errors.As(err, &inUse) {
+		t.Fatalf("CreateTable(%s): %v", table, err)
+	}
+	t.Cleanup(func() {
+		_, _ = client.DeleteTable(context.Background(), &dynamodb.DeleteTableInput{TableName: awssdk.String(table)})
+	})
+	return store.NewDynamoStore(client, table)
 }
 
 func newIntegrationStore(t *testing.T) store.Store {
@@ -227,7 +267,7 @@ func TestIntegrationBackupExportThenImport_RoundTripsCiphertext(t *testing.T) {
 	var exportOut bytes.Buffer
 	err := runBackupExport(ctx, srcStore, noopLogger{}, testSecretKey, backupExportOpts{
 		tier: "root", env: "prod", outputPath: outPath, includeSecrets: true,
-	}, os.WriteFile, "tester", &exportOut)
+	}, os.WriteFile, os.Chmod, "tester", &exportOut)
 	if err != nil {
 		t.Fatalf("runBackupExport: %v", err)
 	}
@@ -257,5 +297,112 @@ func TestIntegrationBackupExportThenImport_RoundTripsCiphertext(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "s3cr3t-root-value") {
 		t.Fatalf("imported secret did not round-trip, got: %s", out.String())
+	}
+}
+
+// TestIntegrationBackupImport_MaliciousTierEditFailsToDecryptAfterImport is
+// the real-DynamoDB analogue of the fake-store unit test with the same
+// purpose (see backup_import_test.go). It runs the ACTUAL export -> edit ->
+// import -> get pipeline against DynamoDB Local: export a real item from a
+// real "repo" tier table, tamper with the exported file's Metadata.Tier to
+// claim "identity", import it into a real "identity" tier table, and prove
+// a subsequent get against that table fails to decrypt — the AAD tier
+// binding surviving a real store round-trip, not just an in-memory fake.
+func TestIntegrationBackupImport_MaliciousTierEditFailsToDecryptAfterImport(t *testing.T) {
+	client := newIntegrationClient(t)
+	repoStore := newRealTierTable(t, client, "repo", "dev")
+	ctx := context.Background()
+
+	const plaintext = "s3cr3t-real-transplant-must-fail"
+	if err := runPut(ctx, repoStore, noopLogger{}, testSecretKey, "repo", "shared-key", "dev", "tester",
+		strings.NewReader(plaintext)); err != nil {
+		t.Fatalf("seed runPut: %v", err)
+	}
+
+	dir := t.TempDir()
+	exportPath := dir + "/export.json"
+	var exportOut bytes.Buffer
+	if err := runBackupExport(ctx, repoStore, noopLogger{}, testSecretKey, backupExportOpts{
+		tier: "repo", env: "dev", outputPath: exportPath, includeSecrets: true,
+	}, os.WriteFile, os.Chmod, "tester", &exportOut); err != nil {
+		t.Fatalf("runBackupExport: %v", err)
+	}
+
+	// The malicious edit: rewrite the exported file's own Metadata.Tier from
+	// "repo" to "identity", leaving every item's ciphertext untouched.
+	raw, err := os.ReadFile(exportPath) //nolint:gosec // fixed test-owned path under t.TempDir()
+	if err != nil {
+		t.Fatalf("read exported file: %v", err)
+	}
+	var bf backup.BackupFile
+	if err := json.Unmarshal(raw, &bf); err != nil {
+		t.Fatalf("unmarshal exported file: %v", err)
+	}
+	if bf.Metadata.Tier != "repo" {
+		t.Fatalf("Metadata.Tier = %q, want repo (test setup broken)", bf.Metadata.Tier)
+	}
+	bf.Metadata.Tier = "identity"
+	tampered, err := json.Marshal(bf)
+	if err != nil {
+		t.Fatalf("marshal tampered file: %v", err)
+	}
+	tamperedPath := dir + "/tampered.json"
+	if err := os.WriteFile(tamperedPath, tampered, 0o600); err != nil {
+		t.Fatalf("write tampered file: %v", err)
+	}
+
+	// Import resolves its target table purely from the (now-lying) file
+	// metadata, using the REAL per-tier table resolution — not a fake that
+	// ignores what it's asked for.
+	identityStore := newRealTierTable(t, client, "identity", "dev")
+	openFn := func(tier, env string) (store.Store, string, error) {
+		if tier != "identity" || env != "dev" {
+			t.Fatalf("openFn called with tier=%q env=%q, want identity/dev (the tampered metadata)", tier, env)
+		}
+		return identityStore, "ffreis-vault-identity-dev", nil
+	}
+	if err := runBackupImport(ctx, tamperedPath, backup.ImportOptions{Overwrite: true}, noopLogger{}, openFn); err != nil {
+		t.Fatalf("runBackupImport: %v (import itself must succeed — it never decrypts anything)", err)
+	}
+
+	var out bytes.Buffer
+	err = runGet(ctx, identityStore, testSecretKey, "identity", "shared-key", "dev", true, &out)
+	if err == nil {
+		t.Fatal("runGet() against the transplanted item succeeded, want decrypt failure — the AAD tier binding did not survive a real store round-trip")
+	}
+	if strings.Contains(err.Error(), plaintext) || strings.Contains(out.String(), plaintext) {
+		t.Fatalf("plaintext leaked despite the failed transplant decrypt: error=%q stdout=%q", err.Error(), out.String())
+	}
+}
+
+// TestIntegrationTierBoundary_PutUnderOneTierAbsentFromOthers proves the
+// tier/table separation itself against REAL DynamoDB Local, using the exact
+// per-tier table names vaulttier.TableName resolves (not one throwaway
+// table standing in for all three, as every other integration test uses): a
+// secret put under the "repo" tier's real table must be genuinely absent
+// from the real "identity" and "root" tables for the same env/key, not just
+// present in "repo".
+func TestIntegrationTierBoundary_PutUnderOneTierAbsentFromOthers(t *testing.T) {
+	client := newIntegrationClient(t)
+	repoStore := newRealTierTable(t, client, "repo", "dev")
+	identityStore := newRealTierTable(t, client, "identity", "dev")
+	rootStore := newRealTierTable(t, client, "root", "dev")
+	ctx := context.Background()
+
+	const key = "tier-boundary-key"
+	if err := runPut(ctx, repoStore, noopLogger{}, testSecretKey, "repo", key, "dev", "tester",
+		strings.NewReader("only-in-repo-tier")); err != nil {
+		t.Fatalf("seed runPut under repo tier: %v", err)
+	}
+
+	if _, err := repoStore.Get(ctx, vaultProject, "dev", store.ItemTypeSecret, key); err != nil {
+		t.Fatalf("Get against repo's own table: %v, want the item to be present", err)
+	}
+
+	for tier, st := range map[string]store.Store{"identity": identityStore, "root": rootStore} {
+		if _, err := st.Get(ctx, vaultProject, "dev", store.ItemTypeSecret, key); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("Get(%q) against the %s tier's own (different, real) table = %v, want store.ErrNotFound — "+
+				"a repo-tier secret must never be reachable from another tier's table", key, tier, err)
+		}
 	}
 }

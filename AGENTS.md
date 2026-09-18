@@ -100,11 +100,30 @@ below.
   added tests (an httptest-backed STS fake for `callerIdentity`/`whoami`, an
   "unreachable AWS config" fake for `newDeleteCmd`/`newListCmd`'s RunE
   closures, one `encryptVaultValue` negative case) without touching the
-  ported test files themselves. Currently ~91.6%/100% (cmd/vaultctl /
-  internal/vaulttier).
-- **Mutation testing:** Runs monthly against `./internal/...` with a `60%`
-  efficacy threshold. Triggered by `mutation.yml`. `internal/vaulttier`
-  currently kills 7/7 mutants (100% efficacy).
+  ported test files themselves. Currently ~93.0%/100% (cmd/vaultctl /
+  internal/vaulttier), gate passes at 93.2%.
+- **Mutation testing:** Runs monthly against `./internal/... ./cmd/vaultctl/...`
+  with a `60%` efficacy threshold (both packages in `MUTATION_PACKAGES` and
+  in `mutation.yml`'s `packages` input — previously `cmd/vaultctl` was
+  excluded from both, meaning the cobra command wiring that decides which
+  env var gets checked and whether a value gets printed was NEVER mutation
+  tested; here that wiring IS the security logic, not low-value glue).
+  `internal/vaulttier` kills 7/7 mutants, `cmd/vaultctl` kills 111/111 (both
+  100% efficacy, 100% mutator coverage) as of the audit that added this
+  line — re-run `make mutation` after any change to either package.
+- **os.WriteFile does not correct a pre-existing file's permissions.** Its
+  own doc says so plainly: the `mode` argument only applies when CREATING a
+  new file; if the target already exists, `WriteFile` truncates and
+  rewrites it "without changing permissions." `export-env` and
+  `backup export` both write secret-bearing files at `0600` — a bare
+  `writeFile(path, data, 0o600)` call would silently keep a pre-existing
+  looser mode (e.g. `0644` left over from a different umask or another
+  tool) while `export-env`'s own confirmation message kept claiming
+  "mode 0600". Both commands now go through `writeSecretFile` in
+  `helpers.go`, which does an explicit `chmod` after every write regardless
+  of whether the file existed already. Any future command that writes
+  secret material to disk must use this helper too, never a bare
+  `writeFile` call.
 - **Full test pyramid, matching `ffreis-platform-configctl`'s own reference
   pattern:** unit (`make test`), integration against a real DynamoDB Local
   container (`make test-integration`, ports/starts/stops it via podman or
@@ -112,7 +131,21 @@ below.
   binary as a subprocess (`make test-e2e`). Both integration and e2e tests
   are build-tagged (`integration`/`e2e`) and self-`t.Skip` when no reachable
   endpoint is found, so a plain `go test ./...`/CI run without a container
-  runtime stays green rather than silently skipping unnoticed.
+  runtime stays green rather than silently skipping unnoticed. **This CI
+  wiring was previously broken for both suites**: `integration.yml` ran
+  `go test -tags=integration ./...` with no DynamoDB reachable at all (no
+  service container), so every integration test silently self-skipped on
+  every PR and merge to main, forever — the workflow looked green having
+  executed zero real assertions. `test-e2e` had no CI workflow whatsoever;
+  it only ever ran when a human happened to run it locally. Both are now
+  fixed: `integration.yml` gained a `dynamodb-local` service container, and
+  a new `e2e.yml` runs the e2e suite the same way. This matters because a
+  raw `fmt.Println`/`os.Stdout` write bypassing `exec`/`export-env`'s
+  injected `io.Writer` is NOT caught by the unit tests (which only inspect
+  the writer they were handed) — only the e2e suite, which captures the
+  real OS-level subprocess stdout, catches that class of leak. Verified by
+  deliberately introducing exactly that leak: the unit test stayed green,
+  `make test-e2e` went red.
 - **lefthook hooks** pull from `ffreis-platform-standards` (pinned SHA) and run
   `make quality-gates` on pre-push. Install with `make setup`. Note: the CI
   `Lefthook` workflow (`general-lefthook.yml`) runs this repo's `pre-commit`

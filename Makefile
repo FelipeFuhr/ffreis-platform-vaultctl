@@ -19,7 +19,7 @@ LEFTHOOK_VERSION ?= 1.7.10
 LEFTHOOK_DIR ?= $(CURDIR)/.bin
 LEFTHOOK_BIN ?= $(LEFTHOOK_DIR)/lefthook
 
-MUTATION_PACKAGES ?= ./internal/...
+MUTATION_PACKAGES ?= ./internal/... ./cmd/vaultctl/...
 MUTATION_THRESHOLD ?= 60
 
 # Integration/e2e tests run against a real DynamoDB (DynamoDB Local in a

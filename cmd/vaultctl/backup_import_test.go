@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/FelipeFuhr/ffreis-platform-configctl/pkg/backup"
@@ -65,6 +67,76 @@ func TestRunBackupImport_ResolvesTableFromFileMetadata(t *testing.T) {
 	}
 	if setCount != 1 {
 		t.Fatalf("store.Set called %d times, want 1", setCount)
+	}
+}
+
+// TestRunBackupImport_MaliciousTierEditCausesTransplantedCiphertextToFailDecryption
+// is the real, end-to-end proof of the cross-tier transplant protection
+// through the ACTUAL backup export -> malicious edit -> import -> get
+// pipeline — not just the isolated AADKey/runGet-level unit tests
+// elsewhere. It builds a backup item genuinely encrypted under tier "repo",
+// then constructs a backup file whose Metadata.Tier lies and claims
+// "identity" (exactly what an attacker editing an exported JSON file before
+// handing it to `backup import` would do), imports it, and confirms a
+// SUBSEQUENT `get identity <key>` against the table the malicious import
+// wrote to fails to decrypt — proving the AAD tier binding, not merely a
+// round-trip of the tier field, is what actually stops the attack.
+func TestRunBackupImport_MaliciousTierEditCausesTransplantedCiphertextToFailDecryption(t *testing.T) {
+	t.Parallel()
+
+	const plaintext = "s3cr3t-transplant-must-fail-to-decrypt"
+	// Genuinely encrypted under tier "repo" (AAD bound to "repo/shared-key").
+	repoItem := encryptedVaultItem("repo", "dev", "shared-key", plaintext)
+
+	// The malicious edit: this backup file's own Metadata.Tier claims
+	// "identity" even though the ciphertext it carries was sealed under
+	// "repo".
+	path := writeBackupFile(t, "identity", "dev", []backup.BackupItem{
+		{
+			Key: repoItem.Key, Value: repoItem.Value, KeyID: repoItem.KeyID,
+			ItemType: string(store.ItemTypeSecret), Checksum: "sha256:x",
+		},
+	})
+
+	var imported *store.Item
+	openFn := func(tier, env string) (store.Store, string, error) {
+		if tier != "identity" || env != "dev" {
+			t.Fatalf("openFn called with tier=%q env=%q, want identity/dev (the file's edited metadata)", tier, env)
+		}
+		return fakeStore{
+			getFn: func(context.Context, string, string, store.ItemType, string) (*store.Item, error) {
+				return nil, store.ErrNotFound
+			},
+			setFn: func(_ context.Context, item *store.Item) error {
+				imported = item
+				return nil
+			},
+		}, "ffreis-vault-identity-dev", nil
+	}
+
+	if err := runBackupImport(context.Background(), path, backup.ImportOptions{}, noopLogger{}, openFn); err != nil {
+		t.Fatalf("runBackupImport() error = %v — import itself must succeed here (it never decrypts anything); "+
+			"the transplant is only caught at the NEXT decrypt attempt", err)
+	}
+	if imported == nil {
+		t.Fatal("store.Set was never called — the malicious import did not actually write the transplanted ciphertext")
+	}
+
+	// A subsequent operator now runs `vaultctl get identity shared-key`
+	// against the table the malicious import just wrote to. This MUST fail:
+	// the ciphertext's AAD is bound to "repo/shared-key", not
+	// "identity/shared-key", so decryption must not succeed even though
+	// tier, env, key, and passphrase all line up from the caller's side.
+	getStore := fakeStore{getFn: func(context.Context, string, string, store.ItemType, string) (*store.Item, error) {
+		return imported, nil
+	}}
+	var out bytes.Buffer
+	err := runGet(context.Background(), getStore, testSecretKey, "identity", "shared-key", "dev", true, &out)
+	if err == nil {
+		t.Fatal("runGet() after the malicious import succeeded, want decrypt failure — the AAD tier binding did not stop the transplant")
+	}
+	if strings.Contains(err.Error(), plaintext) || strings.Contains(out.String(), plaintext) {
+		t.Fatalf("plaintext leaked despite the failed transplant decrypt: error=%q stdout=%q", err.Error(), out.String())
 	}
 }
 
